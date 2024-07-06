@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const bcrypt = require("bcrypt")
 const pool = require("./config")
+const jwt = require("jsonwebtoken")
 var db = []
 
 router.post("/registrar", async(req, res) =>{
@@ -27,8 +28,31 @@ router.post("/registrar", async(req, res) =>{
 
 })
 
-router.post("/login", (req, res) =>{
-    res.send("login")
+router.post("/login", async(req, res) =>{
+    try {
+        let cliente = await pool.connect()
+        let dados = await cliente.query("select * from tb_usuarios where email = $1", [req.body.email])
+        if(dados.rowCount > 0){
+            let ok = await bcrypt.compare(req.body.password, dados.rows[0].password)
+            if(ok){
+                let token = jwt.sign({
+                    id: dados.rows[0].id,
+                    nome: dados.rows[0].nome,
+                    email: dados.rows[0].email,
+                    perfil: dados.rows[0].perfil
+                }, process.env.SECRET_KEY, {expiresIn: "1h"})
+                res.status(200).send(token)
+            }
+            else{
+                res.status(404).send("Senha não confere")
+            }
+        }
+        else{
+            res.status(404).send("Usuario não cadastrado")
+        }
+    } catch (error) {
+        res.status(400).send(error.message)
+    }
 })
 
 module.exports = router
